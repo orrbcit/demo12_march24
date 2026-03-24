@@ -11,36 +11,55 @@ import { auth, db } from "./firebaseConfig.js";
 // Fields populated: name, school, city
 // Form field IDs: nameInput, schoolInput, cityInput
 // -------------------------------------------------------------
-function populateUserInfo() {
-    onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            try {
-                // reference to the user document
-                const userRef = doc(db, "users", user.uid);
-                const userSnap = await getDoc(userRef);
+// function populateUserInfo() {
+//     onAuthStateChanged(auth, async (user) => {
+//         if (user) {
+//             try {
+//                 // reference to the user document
+//                 const userRef = doc(db, "users", user.uid);
+//                 const userSnap = await getDoc(userRef);
 
-                if (userSnap.exists()) {
-                    const userData = userSnap.data();
+//                 if (userSnap.exists()) {
+//                     const userData = userSnap.data();
 
-                    const { name = "", school = "", city = "" } = userData;
+//                     const { name = "", school = "", city = "" } = userData;
 
-                    document.getElementById("nameInput").value = name;
-                    document.getElementById("schoolInput").value = school;
-                    document.getElementById("cityInput").value = city;
-                } else {
-                    console.log("No such document!");
-                }
-            } catch (error) {
-                console.error("Error getting user document:", error);
-            }
+//                     document.getElementById("nameInput").value = name;
+//                     document.getElementById("schoolInput").value = school;
+//                     document.getElementById("cityInput").value = city;
+//                 } else {
+//                     console.log("No such document!");
+//                 }
+//             } catch (error) {
+//                 console.error("Error getting user document:", error);
+//             }
+//         } else {
+//             console.log("No user is signed in");
+//         }
+//     });
+// }
+
+async function populateUserInfo(userId) {
+    try {
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+            const userData = userSnap.data();
+            const { name = "", school = "", city = "" } = userData;
+
+            document.getElementById("nameInput").value = name;
+            document.getElementById("schoolInput").value = school;
+            document.getElementById("cityInput").value = city;
         } else {
-            console.log("No user is signed in");
+            console.log("No such document!");
         }
-    });
+    } catch (error) {
+        console.error("Error getting user document:", error);
+    }
 }
-
 //call the function to run it 
-populateUserInfo();
+//populateUserInfo();
 
 function editUserInfo() {
     //Enable the form fields
@@ -89,3 +108,75 @@ async function updateUserDocument(uid, name, school, city) {
         console.error("Error updating user document:", error);
     }
 }
+
+async function renderSavedHikes(userId) {
+    const hikeCardGroup = document.getElementById("hikeCardGroup");
+    const newcardTemplate = document.getElementById("savedCardTemplate");
+
+    // Clear existing cards
+    hikeCardGroup.innerHTML = "";
+
+    try {
+        const userRef = doc(db, "users", userId);
+        const userDocSnap = await getDoc(userRef);
+
+        if (!userDocSnap.exists()) {
+            console.log("User does not exist:", userId);
+            hikeCardGroup.innerHTML = "<p>User does not exist.</p>";
+            return;
+        }
+
+        const userData = userDocSnap.data();
+        const bookmarks = userData.bookmarks || [];
+
+        if (bookmarks.length === 0) {
+            hikeCardGroup.innerHTML = "<p>No saved hikes found.</p>";
+            return;
+        }
+
+        for (const hikeId of bookmarks) {
+            try {
+                const hikeRef = doc(db, "hikes", hikeId);
+                const hikeDocSnap = await getDoc(hikeRef);
+
+                if (!hikeDocSnap.exists()) {
+                    console.log("No hike document for ID", hikeId);
+                    continue;
+                }
+
+                const hikeData = hikeDocSnap.data();
+                const newcard = newcardTemplate.content.cloneNode(true);
+                newcard.querySelector(".card-title").innerText = hikeData.name;
+                newcard.querySelector(".card-text").textContent = hikeData.details || `Located in ${hikeData.city}.`;
+                newcard.querySelector(".card-length").innerText = hikeData.length;
+                newcard.querySelector(".card-image").src = `./images/${hikeData.code}.jpg`;
+                newcard.querySelector("a").href = "eachHike.html?docID=" + hikeId;
+                hikeCardGroup.appendChild(newcard);
+
+            } catch (hikeError) {
+                console.error("Error loading hike:", hikeId, hikeError);
+            }
+        }
+
+    } catch (error) {
+        console.error("Error rendering saved hikes:", error);
+        hikeCardGroup.innerHTML = "<p>Something went wrong while loading saved hikes.</p>";
+    }
+}
+
+//renderSavedHikes(userId)
+
+function initProfilePage() {
+    onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+            // Redirect to login page if no user is signed in
+            window.location.href = "login.html";
+            return;
+        }
+
+        await populateUserInfo(user.uid);
+        await renderSavedHikes(user.uid);
+    });
+}
+
+initProfilePage();
